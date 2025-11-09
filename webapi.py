@@ -246,3 +246,12 @@ async def serve_static_nocache(rest_of_path: str):
 def serve_index():
     headers = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
     return FileResponse("static/index.html", headers=headers)
+
+@app.get("/admin")
+def serve_admin():
+    """Serve the admin SPA page with strict no-cache headers.
+
+    Returns admin.html so the UI can perform CRUD operations via /api/admin endpoints.
+    """
+    headers = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}
+    return FileResponse("static/admin.html", headers=headers)
