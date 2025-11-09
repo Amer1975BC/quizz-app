@@ -34,6 +34,20 @@ Voeg bijvoorbeeld elke 30 minuten auto-save toe:
 */30 * * * * /root/quiz-app/scripts/push.sh "chore: autosave" >> /root/quiz-app/push.log 2>&1
 ```
 
+### Continu watch (polling)
+Je kunt ook een continue loop starten die elke 20s checkt en automatisch pusht:
+```bash
+./scripts/auto-push-loop.sh 20
+```
+Stoppen met Ctrl+C. Tip: start in tmux/screen of als systemd-service.
+
+### Post-commit hook (auto-push na commit)
+Installeer een hook zodat elke `git commit` automatisch een push doet:
+```bash
+./scripts/install-hooks.sh
+```
+Vanaf dan wordt na elke commit automatisch `scripts/push.sh` aangeroepen.
+
 
 ## Handmatig ontwikkelen
 ```bash
