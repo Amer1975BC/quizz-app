@@ -1,48 +1,30 @@
-## docker-compose.yml - Traefik + quiz-app example
-# EDIT THESE BEFORE DEPLOYING:
-#  - replace `you@example.com` with your ACME email
-#  - replace `quiz-app.example.com` with your real hostname
-version: '3.8'
 services:
   traefik:
     image: traefik:v2.10
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.le.acme.tlschallenge=true
-      - --certificatesresolvers.le.acme.email=you@example.com
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:9080"
+      - "--api.insecure=true"
+      - "--log.level=DEBUG"
     ports:
-      - "80:80"
-      - "443:443"
+      - "9080:9080"
+      - "9081:8080"  # Dashboard op poort 9081
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_letsencrypt:/letsencrypt
-    restart: unless-stopped
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - web
 
   quiz-app:
     build: .
-    image: quizz-app:latest
-    restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      # Replace the Host rule with your real domain
-      - "traefik.http.routers.quiz.rule=Host(`quiz-app.example.com`)"
-      - "traefik.http.routers.quiz.entrypoints=websecure"
-      - "traefik.http.routers.quiz.tls=true"
-      - "traefik.http.routers.quiz.tls.certresolver=le"
-      # Uvicorn runs on container port 8000
+      - "traefik.http.routers.quiz.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.quiz.entrypoints=web"
       - "traefik.http.services.quiz.loadbalancer.server.port=8000"
     networks:
       - web
 
 networks:
   web:
-    driver: bridge
-
-volumes:
-  traefik_letsencrypt:
+    name: quiz-app_web
