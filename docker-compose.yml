@@ -15,16 +15,49 @@ services:
     networks:
       - web
 
+  postgres:
+    image: postgres:16
+    container_name: quiz-app-postgres
+    environment:
+      - POSTGRES_USER=quiz
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-quizpass_ChangeMe123}
+      - POSTGRES_DB=quizdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quiz -d quizdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   quiz-app:
     build: .
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://quiz:${POSTGRES_PASSWORD:-quizpass_ChangeMe123}@postgres:5432/quizdb
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.quiz.rule=PathPrefix(`/`)"
       - "traefik.http.routers.quiz.entrypoints=web"
       - "traefik.http.services.quiz.loadbalancer.server.port=8000"
+      # Public host-based router for your domain
+      - "traefik.http.routers.quiz-host.rule=Host(`quiz.karovic.net`)"
+      - "traefik.http.routers.quiz-host.entrypoints=web"
+      - "traefik.http.routers.quiz-host.service=quiz"
+      # Local fallback on 9080 (PathPrefix) for IP testing
+      - "traefik.http.routers.quiz-local.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.quiz-local.entrypoints=web"
+      - "traefik.http.routers.quiz-local.service=quiz"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - web
 
 networks:
   web:
     name: quiz-app_web
+
+volumes:
+  pgdata:
