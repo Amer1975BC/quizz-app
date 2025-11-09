@@ -18,6 +18,23 @@ Bezoek vervolgens:
 - Origin (Traefik): http://localhost:9080
 - Via je domein (Traefik/Cloudflared): https://quiz.karovic.net (voorbeeld)
 
+## Automatisch committen & pushen
+
+Gebruik het script `scripts/push.sh` om snel wijzigingen op Git te zetten:
+
+```bash
+./scripts/push.sh "feat: update vragen"
+```
+
+Als je geen message meegeeft wordt automatisch een tijdstempel gebruikt.
+
+### Cron (optioneel)
+Voeg bijvoorbeeld elke 30 minuten auto-save toe:
+```bash
+*/30 * * * * /root/quiz-app/scripts/push.sh "chore: autosave" >> /root/quiz-app/push.log 2>&1
+```
+
+
 ## Handmatig ontwikkelen
 ```bash
 uvicorn webapi:app --reload --host 0.0.0.0 --port 8000
