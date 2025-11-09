@@ -1,0 +1,12 @@
+[
+  {
+    "text": "Wat is 2 + 2?",
+    "choices": ["3", "4", "5"],
+    "correct_index": 1
+  },
+  {
+    "text": "Welke kleur heeft de lucht op een heldere dag?",
+    "choices": ["Groen", "Blauw", "Rood"],
+    "correct_index": 1
+  }
+]
