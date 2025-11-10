@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException, Request, Response, Depends
+import os
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
 from uuid import uuid4
 from typing import Dict
 from typing import List, Dict
@@ -13,6 +16,21 @@ from pydantic import BaseModel
 
 
 app = FastAPI(title="Quiz App API")
+
+# Basic Auth setup for /admin
+security = HTTPBasic()
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+# Password file for runtime updates
+ADMIN_PASS_FILE = os.environ.get("ADMIN_PASS_FILE", "/app/admin_pass.txt")
+def get_admin_pass():
+    try:
+        with open(ADMIN_PASS_FILE, "r") as f:
+            return f.read().strip()
+    except Exception:
+        return os.environ.get("ADMIN_PASS", "admin")
+def set_admin_pass(new_pass: str):
+    with open(ADMIN_PASS_FILE, "w") as f:
+        f.write(new_pass.strip())
 
 # Ensure tables exist (idempotent)
 Base.metadata.create_all(engine)
@@ -248,10 +266,36 @@ def serve_index():
     return FileResponse("static/index.html", headers=headers)
 
 @app.get("/admin")
-def serve_admin():
-    """Serve the admin SPA page with strict no-cache headers.
-
-    Returns admin.html so the UI can perform CRUD operations via /api/admin endpoints.
-    """
+def serve_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_user = secrets.compare_digest(credentials.username, ADMIN_USER)
+    correct_pass = secrets.compare_digest(credentials.password, get_admin_pass())
+    if not (correct_user and correct_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     headers = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"}
     return FileResponse("static/admin.html", headers=headers)
+# --- Admin password change endpoint ---
+from pydantic import BaseModel
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@app.post("/api/admin/password")
+def change_admin_password(payload: PasswordChangeRequest, credentials: HTTPBasicCredentials = Depends(security)):
+    # Only allow if current password matches
+    correct_user = secrets.compare_digest(credentials.username, ADMIN_USER)
+    correct_pass = secrets.compare_digest(credentials.password, get_admin_pass())
+    if not (correct_user and correct_pass):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized", headers={"WWW-Authenticate": "Basic"})
+    # Validate current password
+    if not secrets.compare_digest(payload.current_password, get_admin_pass()):
+        raise HTTPException(status_code=403, detail="Current password incorrect")
+    # Validate new password
+    if not payload.new_password or len(payload.new_password) < 4:
+        raise HTTPException(status_code=400, detail="New password too short")
+    set_admin_pass(payload.new_password)
+    return {"success": True}
+
