@@ -87,4 +87,50 @@ async function render() {
   }
 }
 
+window.adminUser = "admin";
+
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("change-password-form");
+  if (form) {
+    console.debug("Wachtwoordwijzig-formulier gevonden");
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const current = document.getElementById("current-password").value;
+      const newpw = document.getElementById("new-password").value;
+      const msg = document.getElementById("change-password-message");
+      msg.textContent = "";
+      console.debug("Wachtwoord wijzigen verstuurd", {current, newpw});
+      try {
+        const resp = await fetch("/api/admin/password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Basic " + btoa(window.adminUser + ":" + current)
+          },
+          body: JSON.stringify({ current_password: current, new_password: newpw })
+        });
+        console.debug("Response wachtwoordwijzig", resp);
+        if (resp.ok) {
+          msg.classList.remove("text-danger");
+          msg.classList.add("text-success");
+          msg.textContent = "Wachtwoord succesvol gewijzigd.";
+          form.reset();
+        } else {
+          const data = await resp.json();
+          msg.classList.remove("text-success");
+          msg.classList.add("text-danger");
+          msg.textContent = data.detail || "Fout bij wijzigen.";
+        }
+      } catch (err) {
+        msg.classList.remove("text-success");
+        msg.classList.add("text-danger");
+        msg.textContent = "Netwerkfout.";
+        console.error("Wachtwoordwijziging faalt", err);
+      }
+    });
+  } else {
+    console.error("Wachtwoordwijzig-formulier niet gevonden");
+  }
+});
+
 render();

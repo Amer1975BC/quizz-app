@@ -9,11 +9,38 @@
   <body class="bg-light">
     <nav class="navbar navbar-expand-lg bg-white mb-3 border-bottom">
       <div class="container">
-        <a class="navbar-brand" href="/">Quiz App</a>
+  <a class="navbar-brand" href="/">Quiz App</a>
+  <button id="btn-change-password" class="btn btn-outline-secondary ms-3" type="button" data-bs-toggle="modal" data-bs-target="#changePasswordModal">Wachtwoord wijzigen</button>
         <span class="navbar-text">Admin</span>
       </div>
     </nav>
     <main class="container" id="admin-app"></main>
+    <!-- Change Password Modal -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="changePasswordModalLabel">Wachtwoord wijzigen</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="change-password-form">
+              <div class="mb-3">
+                <label for="current-password" class="form-label">Huidig wachtwoord</label>
+                <input type="password" class="form-control" id="current-password" required>
+              </div>
+              <div class="mb-3">
+                <label for="new-password" class="form-label">Nieuw wachtwoord</label>
+                <input type="password" class="form-control" id="new-password" required>
+              </div>
+              <div id="change-password-message" class="mb-2 text-danger"></div>
+              <button type="submit" class="btn btn-primary">Wijzigen</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="/static/admin.js?v=20251109L"></script>
   </body>
 </html>
