@@ -15,9 +15,10 @@ async function apiRequest(path, options = {}) {
   return await resp.text();
 }
 
-export async function startSession() {
+export async function startSession(params = '') {
   // returns { session_id }
-  return await apiRequest('/api/start', { method: 'POST' });
+  const url = `/api/start${params}`;
+  return await apiRequest(url, { method: 'POST' });
 }
 
 export async function fetchQuestion(sessionId) {

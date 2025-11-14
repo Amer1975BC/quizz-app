@@ -1,8 +1,11 @@
-import { startSession, fetchQuestion, submitAnswer, fetchResult } from './api.js?v=20251109L';
+// Safari compatible version - load API functions globally
+// API functions will be loaded via separate script tag
 
-const appEl = document.getElementById('app');
-console.log('Loaded app.js version 20251109L');
-window._quiz_debug = { appLoaded: true };
+const quizContent = document.getElementById('quiz-content');
+const scoreEl = document.getElementById('score');
+const nextBtn = document.getElementById('next-btn');
+const backBtn = document.getElementById('back-btn');
+const quizSelector = document.getElementById('quiz-selector');
 
 const state = {
   loading: false,
@@ -13,195 +16,222 @@ const state = {
   lastCorrect: null,
   lastAnswerIndex: null,
   sessionId: null,
+  score: 0,
+  quizType: null
 };
 
-function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  let clickHandler = null;
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === 'class') el.className = v;
-    else if (k === 'onClick' && typeof v === 'function') {
-      clickHandler = v;
-      console.log(`Storing click handler for <${tag}>`);
-    }
-    else if (k.startsWith('on') && typeof v === 'function') {
-      const eventName = k.slice(2).toLowerCase();
-      console.log(`Adding event handler for ${k} (${eventName}) to <${tag}>`);
-      window._quiz_debug.lastHandler = { tag, event: k, eventName };
-      el.addEventListener(eventName, v);
-    }
-    else if (v !== null && v !== undefined) el.setAttribute(k, v);
-  }
-  // Apply click handler after element is created
-  if (clickHandler) {
-    el.onclick = clickHandler;
-    console.log(`Applied onclick to <${tag}>`);
-  }
-  for (const c of children) {
-    if (Array.isArray(c)) c.forEach(x => el.appendChild(x instanceof Node ? x : document.createTextNode(x)));
-    else el.appendChild(c instanceof Node ? c : document.createTextNode(c));
-  }
-  return el;
+// Quiz selector functions
+window.startQuiz = function(type) {
+  state.quizType = type;
+  quizSelector.style.display = 'none';
+  quizContent.style.display = 'block';
+  scoreEl.style.display = 'block';
+  backBtn.style.display = 'block';
+  
+  // Start appropriate quiz
+  onStart(type);
 }
 
-function renderStart() {
-  console.log('renderStart called');
-  window._quiz_debug.renderStart = true;
-  appEl.innerHTML = '';
-  const card = h('div', { class: 'card shadow quiz-card' },
-    h('div', { class: 'card-body' },
-      h('h3', { class: 'card-title mb-3' }, 'Welkom!'),
-      h('p', { class: 'card-text' }, 'Klaar voor een korte quiz?'),
-      h('button', { class: 'btn btn-primary', onClick: onStart }, 'Start quiz')
-    )
-  );
-  appEl.appendChild(card);
-  window._quiz_debug.startRendered = true;
-}
-
-function progressBar() {
-  const percent = state.total > 0 ? Math.round((state.index / state.total) * 100) : 0;
-  return h('div', { class: 'progress mb-3' },
-    h('div', { class: 'progress-bar', role: 'progressbar', style: `width: ${percent}%` }, `${percent}%`)
-  );
+window.showQuizSelector = function() {
+  quizSelector.style.display = 'block';
+  quizContent.style.display = 'none';
+  scoreEl.style.display = 'none';
+  nextBtn.style.display = 'none';
+  backBtn.style.display = 'none';
+  
+  // Reset state
+  state.sessionId = null;
+  state.score = 0;
+  state.index = 0;
 }
 
 function renderQuestion() {
-  console.log('renderQuestion called, state.answered:', state.answered);
-  appEl.innerHTML = '';
-  
+  quizContent.innerHTML = '';
+  nextBtn.style.display = 'none';
+
   const q = state.question;
-  
-  const btns = q.choices.map((text, i) => {
-    const classes = ['btn', 'btn-outline-secondary', 'w-100', 'choice-btn'];
-    if (state.answered) {
-      if (i === state.lastAnswerIndex) classes.push(state.lastCorrect ? 'correct' : 'incorrect');
-    }
-    console.log(`Creating button ${i}, disabled: ${state.answered}`);
-    
-    // Create button directly like test button
+  const questionDiv = document.createElement('div');
+  questionDiv.className = 'question';
+  questionDiv.textContent = q.text;
+
+  const answersDiv = document.createElement('div');
+  answersDiv.className = 'answers';
+
+  for (var i = 0; i < q.choices.length; i++) {
+    var text = q.choices[i];
     const btn = document.createElement('button');
-    btn.className = classes.join(' ');
     btn.textContent = text;
     btn.disabled = state.answered;
-    btn.style.cssText = 'pointer-events: auto; cursor: pointer;';
-    btn.onclick = () => {
-      console.log(`Button ${i} clicked!`);
-      onAnswer(i);
-    };
-    
-    return btn;
-  });
+    (function(index) {
+      btn.onclick = function() { onAnswer(index, btn); };
+    })(i);
+    if (state.answered) {
+      if (i === state.lastAnswerIndex) {
+        btn.classList.add(state.lastCorrect ? 'correct' : 'wrong');
+      }
+      // Show all correct answers
+      if (state.correctAnswers && state.correctAnswers.indexOf(i) !== -1) {
+        btn.classList.add('correct');
+      }
+    }
+    answersDiv.appendChild(btn);
+  }
 
-  const bodyChildren = [
-    h('h5', { class: 'card-title' }, q.text),
-    h('div', { class: 'vstack gap-2 my-3' }, btns),
-    h('div', { class: 'footer-actions' },
-      state.answered ? h('button', { class: 'btn btn-primary', onClick: onNext }, 'Volgende') : h('span', {})
-    )
-  ];
-
-  const card = h('div', { class: 'card shadow quiz-card' },
-    h('div', { class: 'card-body' },
-      progressBar(),
-      ...bodyChildren
-    )
-  );
-  appEl.appendChild(card);
+  quizContent.appendChild(questionDiv);
+  quizContent.appendChild(answersDiv);
 }
 
 function renderResult(score, total) {
-  appEl.innerHTML = '';
-  const card = h('div', { class: 'card shadow quiz-card' },
-    h('div', { class: 'card-body' },
-      h('h3', { class: 'card-title mb-3' }, 'Resultaat'),
-      h('p', {}, `Je score: ${score} / ${total}`),
-      h('div', { class: 'd-flex gap-2' },
-        h('button', { class: 'btn btn-outline-secondary', onClick: () => location.reload() }, 'Opnieuw'),
-        h('button', { class: 'btn btn-primary', onClick: onStart }, 'Nieuwe sessie')
-      )
-    )
-  );
-  appEl.appendChild(card);
-}
-
-async function onStart() {
-  console.log('onStart triggered');
-  try {
-    state.loading = true;
-    const s = await startSession();
-    state.sessionId = s && (s.session_id || s.sessionId || null);
-    console.log('Session created:', state.sessionId);
-    await loadQuestion();
-  } catch (e) {
-    showError(e);
-  } finally {
-    state.loading = false;
-  }
-}
-
-async function loadQuestion() {
-  console.log('Loading question with sessionId:', state.sessionId);
-  const data = await fetchQuestion(state.sessionId).catch(err => { showError(err); return null; });
-  if(!data) return;
-  console.log('Question response:', data);
-  if (data.finished) {
-    const res = await fetchResult(state.sessionId);
-    renderResult(res.score, res.total);
-    return;
-  }
-  state.index = data.index;
-  state.total = data.total;
-  state.question = data.question;
-  state.answered = false;
-  state.lastCorrect = null;
-  state.lastAnswerIndex = null;
-  renderQuestion();
-}
-
-async function onAnswer(i) {
-  console.log('onAnswer triggered for choice:', i);
-  if (state.answered) return;
-  try {
-  const res = await submitAnswer(i, state.sessionId).catch(err => { showError(err); return null; });
-  if(!res) return;
-    state.answered = true;
-    state.lastCorrect = !!res.correct;
-    state.lastAnswerIndex = i;
-    // If finished, jump to result; else show Next button
-    if (res.finished) {
-      renderResult(res.score, res.total);
+  const percentage = Math.round((score / total) * 100);
+  let message = '';
+  
+  if (state.quizType === 'pspo1') {
+    if (percentage >= 85) {
+      message = '🎉 Excellent! Je bent klaar voor het PSPO I examen!';
+    } else if (percentage >= 70) {
+      message = '👍 Goed! Nog wat extra studeren en je bent er klaar voor.';
     } else {
-      renderQuestion();
+      message = '📚 Blijf oefenen. Je hebt meer voorbereiding nodig.';
     }
-  } catch (e) {
-    showError(e);
+  } else {
+    if (percentage >= 80) {
+      message = '🎉 Geweldig resultaat!';
+    } else if (percentage >= 60) {
+      message = '👍 Goed gedaan!';
+    } else {
+      message = '💪 Blijf oefenen!';
+    }
   }
+
+  quizContent.innerHTML = 
+    '<div class="question">Quiz afgerond!</div>' +
+    '<div class="score">Score: ' + score + ' / ' + total + ' (' + percentage + '%)</div>' +
+    '<div class="question" style="font-size: 1.2em; margin-top: 20px;">' + message + '</div>' +
+    '<button class="next-btn" onclick="startQuiz(\'' + state.quizType + '\')">🔄 Opnieuw</button>';
+  nextBtn.style.display = 'none';
 }
 
-async function onNext() {
-  try {
-    await loadQuestion();
-  } catch (e) {
-    showError(e);
-  }
+function onStart(quizType) {
+  if (typeof quizType === 'undefined') quizType = 'general';
+  state.loading = true;
+  
+  // Start session with quiz type parameter
+  const params = quizType === 'pspo1' ? '?category=PSPO1' : '';
+  const url = '/api/start' + params;
+  
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' })
+    .then(function(resp) {
+      if (!resp.ok) {
+        throw new Error('HTTP ' + resp.status);
+      }
+      return resp.json();
+    })
+    .then(function(s) {
+      state.sessionId = s && (s.session_id || s.sessionId || null);
+      state.score = 0;
+      scoreEl.textContent = 'Score: ' + state.score;
+      return loadQuestion();
+    })
+    .then(function() {
+      state.loading = false;
+    })
+    .catch(function(err) {
+      showError(err);
+      state.loading = false;
+    });
+}
+
+function loadQuestion() {
+  const path = state.sessionId ? '/api/question?sid=' + encodeURIComponent(state.sessionId) : '/api/question';
+  
+  return fetch(path, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' })
+    .then(function(resp) {
+      if (!resp.ok) {
+        throw new Error('HTTP ' + resp.status);
+      }
+      return resp.json();
+    })
+    .then(function(data) {
+      if (data.finished) {
+        const resultPath = state.sessionId ? '/api/result?sid=' + encodeURIComponent(state.sessionId) : '/api/result';
+        return fetch(resultPath, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' })
+          .then(function(resp) { return resp.json(); })
+          .then(function(res) {
+            renderResult(res.score, res.total);
+          });
+      }
+      state.index = data.index;
+      state.total = data.total;
+      state.question = data.question;
+      state.answered = false;
+      state.lastCorrect = null;
+      state.lastAnswerIndex = null;
+      state.correctAnswers = null;
+      renderQuestion();
+    })
+    .catch(function(err) {
+      showError(err);
+    });
+}
+
+function onAnswer(i, btn) {
+  if (state.answered) return;
+  
+  const path = state.sessionId ? '/api/answer?sid=' + encodeURIComponent(state.sessionId) : '/api/answer';
+  const body = JSON.stringify({ choice: i });
+  
+  fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: body })
+    .then(function(resp) {
+      if (!resp.ok) {
+        throw new Error('HTTP ' + resp.status);
+      }
+      return resp.json();
+    })
+    .then(function(res) {
+      state.answered = true;
+      state.lastCorrect = !!res.correct;
+      state.lastAnswerIndex = i;
+      state.correctAnswers = res.correct_answers || [];
+      
+      if (res.correct) state.score++;
+      scoreEl.textContent = 'Score: ' + state.score;
+      
+      // Mark buttons
+      const buttons = document.querySelectorAll('.answers button');
+      for (var idx = 0; idx < buttons.length; idx++) {
+        var b = buttons[idx];
+        b.disabled = true;
+        if (idx === i) {
+          b.classList.add(res.correct ? 'correct' : 'wrong');
+        }
+        // Highlight all correct answers
+        if (state.correctAnswers.indexOf(idx) !== -1) {
+          b.classList.add('correct');
+        }
+      }
+      
+      // Show next button
+      if (res.finished) {
+        renderResult(res.score, res.total);
+      } else {
+        nextBtn.style.display = '';
+        nextBtn.onclick = onNext;
+      }
+    })
+    .catch(function(err) {
+      showError(err);
+    });
+}
+
+function onNext() {
+  nextBtn.style.display = 'none';
+  loadQuestion();
 }
 
 function showError(e) {
-  appEl.innerHTML = '';
-  const msg = (e && e.message) ? e.message : String(e);
-  const card = h('div', { class: 'card shadow quiz-card' },
-    h('div', { class: 'card-body' },
-      h('h5', { class: 'card-title text-danger' }, 'Er is een fout opgetreden'),
-      h('pre', { class: 'error' }, msg),
-      h('div', { class: 'd-flex gap-2' },
-        h('button', { class: 'btn btn-outline-secondary', onClick: () => location.reload() }, 'Herlaad'),
-        h('button', { class: 'btn btn-primary', onClick: () => renderStart() }, 'Terug')
-      )
-    )
-  );
-  appEl.appendChild(card);
+  quizContent.innerHTML = '<div class="question" style="color:red;">Fout: ' + (e && e.message ? e.message : String(e)) + '</div>';
+  nextBtn.style.display = 'none';
 }
 
-// Initialize
-renderStart();
+// Show quiz selector on load instead of starting directly
+showQuizSelector();

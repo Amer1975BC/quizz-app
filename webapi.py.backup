@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, status, Query
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +8,6 @@ import secrets
 from uuid import uuid4
 from typing import Dict
 from typing import List, Dict
-from sqlalchemy import func
 from sqlalchemy.orm import selectinload, Session
 from db import Base, engine, SessionLocal
 from models import Question, Choice
@@ -52,37 +51,29 @@ SESSIONS: Dict[str, Dict] = {}
 
 
 # Load questions from the database and adapt to current questionnaire format
-def load_questions_from_db(category=None) -> List[Dict]:
+def load_questions_from_db() -> List[Dict]:
     db = SessionLocal()
     try:
-        # Filter by category if specified
-        query = db.query(Question).options(selectinload(Question.choices))
-        if category:
-            query = query.filter(Question.explanation == category)
-        
-        # Get questions in random order using SQLAlchemy func.random()
-        qs = query.order_by(func.random()).all()
+        qs = db.query(Question).options(selectinload(Question.choices)).all()
         out = []
         for q in qs:
             choices = [c.text for c in q.choices]
-            # Handle multiple correct answers
-            correct_indices = [i for i, c in enumerate(q.choices) if c.is_correct]
-            # For backward compatibility, use first correct answer as "answer"
-            ans_idx = correct_indices[0] if correct_indices else None
-            out.append({"text": q.text, "choices": choices, "answer": ans_idx, "correct_answers": correct_indices})
+            # pick index of the first correct choice (single-correct model)
+            ans_idx = next((i for i,c in enumerate(q.choices) if c.is_correct), None)
+            out.append({"text": q.text, "choices": choices, "answer": ans_idx})
         return out
     finally:
         db.close()
 
 
-def make_session(category=None):
+def make_session():
     # Prefer DB questions; if empty, keep compatibility with JSON fallback
-    questions = load_questions_from_db(category)
+    questions = load_questions_from_db()
     if not questions:
         from quiz_app import load_questions as _json_loader
         questions = _json_loader()
     sid = str(uuid4())
-    SESSIONS[sid] = {"questions": questions, "index": 0, "score": 0, "category": category}
+    SESSIONS[sid] = {"questions": questions, "index": 0, "score": 0}
     return sid
 
 
@@ -124,12 +115,12 @@ def serialize_question(q: Question) -> Dict:
 
 
 @app.post("/api/start")
-def api_start(response: Response, category: str = Query(None)):
-    """Start a new quiz session with optional category. Returns session id in cookie."""
-    sid = make_session(category)
+def api_start(response: Response):
+    """Start a new quiz session. Returns session id in cookie."""
+    sid = make_session()
     # set cookie for client convenience
     response.set_cookie(key="quiz_session", value=sid, httponly=False)
-    return {"session_id": sid, "category": category}
+    return {"session_id": sid}
 
 
 @app.get("/api/question")
@@ -150,7 +141,6 @@ def api_question(sid: str = None, request: Request = None):
 
 
 @app.post("/api/answer")
-@app.post("/api/answer")
 def api_answer(payload: Dict, sid: str = None, request: Request = None):
     """Submit an answer: payload must contain {'choice': int}."""
     if sid is None:
@@ -166,16 +156,13 @@ def api_answer(payload: Dict, sid: str = None, request: Request = None):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid choice")
     q = s["questions"][idx]
-    # Support both single and multiple correct answers
-    correct_answers = q.get("correct_answers", [])
-    if not correct_answers and q.get("answer") is not None:
-        correct_answers = [q.get("answer")]
-    is_correct = choice in correct_answers
+    correct = q.get("answer")
+    is_correct = (choice == correct)
     if is_correct:
         s["score"] += 1
     s["index"] += 1
     finished = s["index"] >= len(s["questions"])
-    return {"correct": is_correct, "finished": finished, "score": s["score"], "total": len(s["questions"]), "correct_answers": correct_answers}
+    return {"correct": is_correct, "finished": finished, "score": s["score"], "total": len(s["questions"])}
 
 
 @app.get("/api/result")

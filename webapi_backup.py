@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, status, Query
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,16 +52,11 @@ SESSIONS: Dict[str, Dict] = {}
 
 
 # Load questions from the database and adapt to current questionnaire format
-def load_questions_from_db(category=None) -> List[Dict]:
+def load_questions_from_db() -> List[Dict]:
     db = SessionLocal()
     try:
-        # Filter by category if specified
-        query = db.query(Question).options(selectinload(Question.choices))
-        if category:
-            query = query.filter(Question.explanation == category)
-        
         # Get questions in random order using SQLAlchemy func.random()
-        qs = query.order_by(func.random()).all()
+        qs = db.query(Question).options(selectinload(Question.choices)).order_by(func.random()).all()
         out = []
         for q in qs:
             choices = [c.text for c in q.choices]
@@ -75,14 +70,14 @@ def load_questions_from_db(category=None) -> List[Dict]:
         db.close()
 
 
-def make_session(category=None):
+def make_session():
     # Prefer DB questions; if empty, keep compatibility with JSON fallback
-    questions = load_questions_from_db(category)
+    questions = load_questions_from_db()
     if not questions:
         from quiz_app import load_questions as _json_loader
         questions = _json_loader()
     sid = str(uuid4())
-    SESSIONS[sid] = {"questions": questions, "index": 0, "score": 0, "category": category}
+    SESSIONS[sid] = {"questions": questions, "index": 0, "score": 0}
     return sid
 
 
@@ -124,12 +119,12 @@ def serialize_question(q: Question) -> Dict:
 
 
 @app.post("/api/start")
-def api_start(response: Response, category: str = Query(None)):
-    """Start a new quiz session with optional category. Returns session id in cookie."""
-    sid = make_session(category)
+def api_start(response: Response):
+    """Start a new quiz session. Returns session id in cookie."""
+    sid = make_session()
     # set cookie for client convenience
     response.set_cookie(key="quiz_session", value=sid, httponly=False)
-    return {"session_id": sid, "category": category}
+    return {"session_id": sid}
 
 
 @app.get("/api/question")
