@@ -55,10 +55,18 @@ SESSIONS: Dict[str, Dict] = {}
 def load_questions_from_db(category=None) -> List[Dict]:
     db = SessionLocal()
     try:
-        # Filter by category if specified
+        # Filter by category with strict separation
         query = db.query(Question).options(selectinload(Question.choices))
-        if category:
-            query = query.filter(Question.explanation == category)
+        
+        if category == 'PSPO1':
+            # Only PSPO1 questions
+            query = query.filter(Question.explanation == 'PSPO1')
+        elif category == 'Verpleegkundig Rekenen':
+            # Only nursing questions
+            query = query.filter(Question.explanation == 'Verpleegkundig Rekenen')
+        else:
+            # General quiz: only questions without specific category (explanation IS NULL)
+            query = query.filter(Question.explanation.is_(None))
         
         # Get questions in random order using SQLAlchemy func.random()
         qs = query.order_by(func.random()).all()

@@ -6,6 +6,99 @@ const scoreEl = document.getElementById('score');
 const nextBtn = document.getElementById('next-btn');
 const backBtn = document.getElementById('back-btn');
 const quizSelector = document.getElementById('quiz-selector');
+const timerContainer = document.getElementById('timer-container');
+const timerValue = document.getElementById('timer-value');
+const timerPause = document.getElementById('timer-pause');
+
+// Timer variables
+var timerInterval = null;
+var startTime = null;
+var elapsedTime = 0;
+var isPaused = false;
+
+// Timer functions
+function startTimer() {
+  startTime = Date.now();
+  elapsedTime = 0;
+  isPaused = false;
+  timerInterval = setInterval(updateTimer, 1000);
+  if (timerContainer) timerContainer.style.display = 'block';
+  if (timerPause) timerPause.textContent = '⏸️';
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function updateTimer() {
+  if (!isPaused && startTime) {
+    var currentTime = Date.now();
+    elapsedTime = Math.floor((currentTime - startTime) / 1000);
+    var minutes = Math.floor(elapsedTime / 60);
+    var seconds = elapsedTime % 60;
+    var timeString = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    if (timerValue) timerValue.textContent = timeString;
+    
+    // Color coding based on time
+    if (timerValue) {
+      timerValue.className = 'timer-value';
+      if (elapsedTime > 600) { // 10 minutes
+        timerValue.className += ' danger';
+      } else if (elapsedTime > 300) { // 5 minutes
+        timerValue.className += ' warning';
+      }
+    }
+  }
+}
+
+window.toggleTimer = function() {
+  isPaused = !isPaused;
+  if (timerPause) {
+    timerPause.textContent = isPaused ? '▶️' : '⏸️';
+    timerPause.title = isPaused ? 'Timer hervatten' : 'Timer pauzeren';
+  }
+};
+
+// Timer functions
+function startTimer() {
+  if (state.timer.interval) {
+    clearInterval(state.timer.interval);
+  }
+  state.timer.seconds = 0;
+  state.timer.paused = false;
+  state.timer.interval = setInterval(function() {
+    if (!state.timer.paused) {
+      state.timer.seconds++;
+      updateTimerDisplay();
+    }
+  }, 1000);
+  timerContainer.style.display = 'block';
+}
+
+function stopTimer() {
+  if (state.timer.interval) {
+    clearInterval(state.timer.interval);
+    state.timer.interval = null;
+  }
+  state.timer.totalTime = state.timer.seconds;
+  timerContainer.style.display = 'none';
+}
+
+function updateTimerDisplay() {
+  var minutes = Math.floor(state.timer.seconds / 60);
+  var seconds = state.timer.seconds % 60;
+  var timeStr = (minutes < 10 ? '0' : '') + minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+  timerValue.textContent = timeStr;
+}
+
+window.toggleTimer = function() {
+  state.timer.paused = !state.timer.paused;
+  timerPause.textContent = state.timer.paused ? '▶️' : '⏸️';
+  timerPause.title = state.timer.paused ? 'Hervat timer' : 'Pauzeer timer';
+};
 
 const state = {
   loading: false,
@@ -17,7 +110,13 @@ const state = {
   lastAnswerIndex: null,
   sessionId: null,
   score: 0,
-  quizType: null
+  quizType: null,
+  timer: {
+    seconds: 0,
+    interval: null,
+    paused: false,
+    totalTime: 0
+  }
 };
 
 // Quiz selector functions
@@ -27,6 +126,9 @@ window.startQuiz = function(type) {
   quizContent.style.display = 'block';
   scoreEl.style.display = 'block';
   backBtn.style.display = 'block';
+  
+  // Start timer
+  startTimer();
   
   // Start appropriate quiz
   onStart(type);
@@ -38,6 +140,9 @@ window.showQuizSelector = function() {
   scoreEl.style.display = 'none';
   nextBtn.style.display = 'none';
   backBtn.style.display = 'none';
+  
+  // Stop and hide timer
+  stopTimer();
   
   // Reset state
   state.sessionId = null;
@@ -93,6 +198,16 @@ function renderResult(score, total) {
     } else {
       message = '📚 Blijf oefenen. Je hebt meer voorbereiding nodig.';
     }
+  } else if (state.quizType === 'nursing') {
+    if (percentage >= 80) {
+      message = '🎉 Uitstekend! Je beheerst verpleegkundig rekenen goed!';
+    } else if (percentage >= 70) {
+      message = '👍 Goed bezig! Nog wat oefening en je bent er!';
+    } else if (percentage >= 60) {
+      message = '💪 Keep going! Blijf oefenen met deze berekeningen.';
+    } else {
+      message = '📖 Meer studie nodig. Focus op de basisprincipes.';
+    }
   } else {
     if (percentage >= 80) {
       message = '🎉 Geweldig resultaat!';
@@ -116,8 +231,14 @@ function onStart(quizType) {
   state.loading = true;
   
   // Start session with quiz type parameter
-  const params = quizType === 'pspo1' ? '?category=PSPO1' : '';
-  const url = '/api/start' + params;
+  var params = '';
+  if (quizType === 'pspo1') {
+    params = '?category=PSPO1';
+  } else if (quizType === 'nursing') {
+    params = '?category=Verpleegkundig%20Rekenen';
+  }
+  
+  var url = '/api/start' + params;
   
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' })
     .then(function(resp) {

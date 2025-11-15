@@ -26,8 +26,18 @@
           <button class="answers button quiz-select-btn" onclick="startQuiz('pspo1')">
             🎯 PSPO1 Scrum Product Owner (15 vragen)
           </button>
+          <button class="answers button quiz-select-btn" onclick="startQuiz('nursing')">
+            🏥 Verpleegkundig Rekenen MBO-4 (100 vragen)
+          </button>
         </div>
         <div id="quiz-content" style="display:none;"></div>
+        <div class="timer-container" id="timer-container" style="display:none;">
+          <div class="timer-display">
+            <span class="timer-label">⏱️ Tijd:</span>
+            <span class="timer-value" id="timer-value">00:00</span>
+            <button class="timer-control" id="timer-pause" onclick="toggleTimer()" title="Pauzeer/Hervat timer">⏸️</button>
+          </div>
+        </div>
         <div class="score" id="score" style="display:none;">Score: 0</div>
         <button class="next-btn" id="next-btn" style="display:none">Volgende vraag</button>
         <button class="next-btn" id="back-btn" style="display:none" onclick="showQuizSelector()">🏠 Terug naar overzicht</button>
