@@ -8,11 +8,23 @@ import secrets
 from uuid import uuid4
 from typing import Dict
 from typing import List, Dict
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import selectinload, Session
 from db import Base, engine, SessionLocal
 from models import Question, Choice
 from pydantic import BaseModel
+
+# AI imports
+try:
+    from ai_config import validate_ai_setup
+    from question_generator import generate_questions_for_category, enhance_question_with_ai
+    from personalized_learning import get_user_recommendations, get_adaptive_question_params
+    from ai_chatbot import start_chat, chat_with_assistant, get_question_explanation
+    AI_AVAILABLE = True
+    print("✅ AI features enabled")
+except ImportError as e:
+    print(f"⚠️  AI features disabled: {e}")
+    AI_AVAILABLE = False
 
 
 
@@ -319,4 +331,95 @@ def change_admin_password(payload: PasswordChangeRequest, credentials: HTTPBasic
         raise HTTPException(status_code=400, detail="New password too short")
     set_admin_pass(payload.new_password)
     return {"success": True}
+
+
+# AI Endpoints
+if AI_AVAILABLE:
+    @app.post("/api/ai/generate-questions")
+    async def api_generate_questions(payload: Dict):
+        """Generate new questions using AI"""
+        try:
+            category = payload.get("category", "general")
+            count = min(payload.get("count", 5), 10)  # Limit to 10
+            difficulty = payload.get("difficulty", "intermediate")
+            
+            questions = await generate_questions_for_category(
+                category=category,
+                count=count, 
+                difficulty=difficulty
+            )
+            
+            return {
+                "success": True,
+                "questions": questions,
+                "count": len(questions)
+            }
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+    
+    @app.post("/api/ai/chat/start")
+    async def api_start_chat(payload: Dict):
+        """Start AI chat session"""
+        try:
+            user_id = payload.get("user_id", "anonymous")
+            context = payload.get("context", {})
+            
+            result = await start_chat(user_id, context)
+            return result
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chat start failed: {str(e)}")
+    
+    @app.post("/api/ai/chat/message")
+    async def api_chat_message(payload: Dict):
+        """Send message to AI chatbot"""
+        try:
+            session_id = payload.get("session_id")
+            message = payload.get("message")
+            context = payload.get("context", {})
+            
+            if not session_id or not message:
+                raise HTTPException(status_code=400, detail="session_id and message required")
+            
+            result = await chat_with_assistant(session_id, message, context)
+            return result
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chat message failed: {str(e)}")
+    
+    @app.post("/api/ai/explain")
+    async def api_explain_question(payload: Dict):
+        """Get AI explanation for a question"""
+        try:
+            question = payload.get("question")
+            choices = payload.get("choices", [])
+            correct_answer = payload.get("correct_answer")
+            user_answer = payload.get("user_answer")
+            category = payload.get("category", "general")
+            
+            if not all([question, choices, correct_answer]):
+                raise HTTPException(status_code=400, detail="question, choices, and correct_answer required")
+            
+            result = await get_question_explanation(
+                question, choices, correct_answer, user_answer, category
+            )
+            return result
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
+    
+    @app.get("/api/ai/status")
+    async def api_ai_status():
+        """Get AI system status"""
+        try:
+            status = validate_ai_setup()
+            return status
+        except Exception as e:
+            return {"error": str(e), "ready": False}
+
+else:
+    @app.get("/api/ai/status")
+    async def api_ai_status_disabled():
+        return {"ready": False, "reason": "AI dependencies not installed"}
 
