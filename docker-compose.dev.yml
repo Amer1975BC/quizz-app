@@ -1,0 +1,17 @@
+# Development overrides for docker-compose
+version: '3.8'
+
+services:
+  quiz-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    environment:
+      - DEBUG=1
+      - RELOAD=1
+    ports:
+      - "8001:8000"  # Direct access for development
+    command: ["uvicorn", "webapi:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
